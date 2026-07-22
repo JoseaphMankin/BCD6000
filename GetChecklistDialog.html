@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 20px;
+      font-size: 14px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #1a73e8;
+    }
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+    select, input {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      width: 100%;
+      margin-top: 18px;
+      padding: 10px;
+      font-size: 15px;
+      cursor: pointer;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #1557b0;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      font-weight: bold;
+      display: none;
+    }
+    #status.success {
+      display: block;
+      background: #d4edda;
+      color: #155724;
+    }
+    #status.error {
+      display: block;
+      background: #f8d7da;
+      color: #721c24;
+    }
+    #status.loading {
+      display: block;
+      background: #cce5ff;
+      color: #004085;
+    }
+    .hint {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .checkbox-row input {
+      width: auto;
+      margin: 0;
+    }
+    .checkbox-row label {
+      margin: 0;
+      font-weight: normal;
+    }
+  </style>
+</head>
+<body>
+
+<h2>⚾ Get Checklist from CardSight</h2>
+
+<label>Brand</label>
+<select id="brand">
+  <option value="Topps">Topps</option>
+  <option value="Donruss">Donruss</option>
+  <option value="Fleer">Fleer</option>
+  <option value="Upper Deck">Upper Deck</option>
+  <option value="Bowman">Bowman</option>
+  <option value="Score">Score</option>
+  <option value="Stadium Club">Stadium Club</option>
+  <option value="Leaf">Leaf</option>
+  <option value="Pinnacle">Pinnacle</option>
+  <option value="O-Pee-Chee">O-Pee-Chee</option>
+</select>
+
+<label>Year</label>
+<select id="year"></select>
+
+<label>Release</label>
+<select id="release">
+  <option value="">— All releases (import everything) —</option>
+</select>
+
+<div class="hint">Select "All releases" to import every set for this brand/year.</div>
+
+<div class="checkbox-row">
+  <input type="checkbox" id="autoClose" checked>
+  <label for="autoClose">Auto-close when complete</label>
+</div>
+
+<button id="fetchBtn" onclick="fetchChecklist()">Fetch Checklist</button>
+
+<div id="status"></div>
+
+<script>
+  // Populate year dropdown
+  (function() {
+    const yearSelect = document.getElementById('year');
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear; y >= 1950; y--) {
+      let option = document.createElement('option');
+      option.value = y;
+      option.text = y;
+      if (y === 1985) option.selected = true;
+      yearSelect.appendChild(option);
+    }
+  })();
+
+  let isLoading = false;
+
+  function fetchChecklist() {
+    if (isLoading) return;
+
+    const brand = document.getElementById('brand').value;
+    const year = document.getElementById('year').value;
+    const release = document.getElementById('release').value;
+    const autoClose = document.getElementById('autoClose').checked;
+
+    if (!brand || !year) {
+      showStatus('Please select a brand and year.', 'error');
+      return;
+    }
+
+    isLoading = true;
+    const btn = document.getElementById('fetchBtn');
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+
+    showStatus('Searching for ' + brand + ' ' + year + '...', 'loading');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        isLoading = false;
+        btn.disabled = false;
+        btn.textContent = 'Fetch Checklist';
+
+        if (result.success) {
+          showStatus(
+            '✅ Import complete!\n\n' +
+            'Brand: ' + brand + '\n' +
+            'Year: ' + year + '\n' +
+            'Cards added: ' + result.cardsAdded + '\n' +
+            'Duplicates skipped: ' + result.duplicatesSkipped,
+            'success'
+          );
+          if (autoClose) {
+            setTimeout(function() {
+              google.script.host.close();
+            }, 2000);
+          }
+        } else {
+          showStatus('❌ ' + result.message, 'error');
+        }
+      })
+      .withFailureHandler(function(error) {
+        isLoading = false;
+        btn.disabled = false;
+        btn.textContent = 'Fetch Checklist';
+        showStatus('❌ Error: ' + error.message, 'error');
+      })
+      .GetChecklistFromDialog({
+        brand: brand,
+        year: year,
+        releaseName: release,
+        autoClose: autoClose
+      });
+  }
+
+  function showStatus(message, type) {
+    const el = document.getElementById('status');
+    el.textContent = message;
+    el.className = type;
+  }
+
+  // When brand/year changes, load available releases
+  document.getElementById('brand').addEventListener('change', loadReleases);
+  document.getElementById('year').addEventListener('change', loadReleases);
+
+  function loadReleases() {
+    const brand = document.getElementById('brand').value;
+    const year = document.getElementById('year').value;
+    const releaseSelect = document.getElementById('release');
+
+    if (!brand || !year) {
+      releaseSelect.innerHTML = '<option value="">— Select brand and year first —</option>';
+      return;
+    }
+
+    releaseSelect.innerHTML = '<option value="">Loading...</option>';
+    releaseSelect.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function(releases) {
+        releaseSelect.disabled = false;
+        releaseSelect.innerHTML = '<option value="">— All releases —</option>';
+        if (releases && releases.length > 0) {
+          releases.forEach(function(r) {
+            let opt = document.createElement('option');
+            opt.value = r.name;
+            opt.text = r.name + (r.year ? ' (' + r.year + ')' : '');
+            releaseSelect.appendChild(opt);
+          });
+        } else {
+          let opt = document.createElement('option');
+          opt.value = '';
+          opt.text = '— No releases found —';
+          releaseSelect.appendChild(opt);
+        }
+      })
+      .withFailureHandler(function() {
+        releaseSelect.disabled = false;
+        releaseSelect.innerHTML = '<option value="">— Error loading releases —</option>';
+      })
+      .SearchCardSightReleases(brand, year);
+  }
+
+  // Initial load
+  setTimeout(loadReleases, 500);
+</script>
+
+</body>
+</html>

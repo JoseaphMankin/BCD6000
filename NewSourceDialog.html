@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 20px;
+      font-size: 14px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #1a73e8;
+    }
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    textarea {
+      height: 80px;
+      resize: vertical;
+    }
+    button {
+      width: 100%;
+      margin-top: 18px;
+      padding: 10px;
+      font-size: 15px;
+      cursor: pointer;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #1557b0;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      display: none;
+    }
+    #status.success {
+      display: block;
+      background: #d4edda;
+      color: #155724;
+    }
+    #status.error {
+      display: block;
+      background: #f8d7da;
+      color: #721c24;
+    }
+    #status.loading {
+      display: block;
+      background: #cce5ff;
+      color: #004085;
+    }
+  </style>
+</head>
+<body>
+
+<h2>📦 New Collection Source</h2>
+
+<label>Title *</label>
+<input id="title" placeholder="Example: 7/1 FB Marketplace Lot">
+
+<label>Date Acquired</label>
+<input id="date" type="date">
+
+<label>Cost ($)</label>
+<input id="cost" type="number" placeholder="0.00" step="0.01">
+
+<label>Location</label>
+<input id="location" placeholder="Example: Grocery store parking lot">
+
+<label>Story / Notes</label>
+<textarea id="story" placeholder="Tell the story of how you acquired this collection..."></textarea>
+
+<button onclick="createSource()">Create Source</button>
+
+<div id="status"></div>
+
+<script>
+  // Set default date to today
+  document.getElementById('date').value = new Date().toISOString().split('T')[0];
+
+  function createSource() {
+
+    const title = document.getElementById('title').value.trim();
+    if (!title) {
+      showStatus('Please enter a title.', 'error');
+      return;
+    }
+
+    const btn = document.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+
+    const data = {
+      title: title,
+      dateAcquired: document.getElementById('date').value || new Date(),
+      cost: parseFloat(document.getElementById('cost').value) || 0,
+      location: document.getElementById('location').value.trim(),
+      story: document.getElementById('story').value.trim()
+    };
+
+    showStatus('Creating source...', 'loading');
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        btn.disabled = false;
+        btn.textContent = 'Create Source';
+        if (result.success) {
+          showStatus('✅ Source created!\n\nID: ' + result.id + '\nTitle: ' + title, 'success');
+          setTimeout(function() {
+            google.script.host.close();
+          }, 2000);
+        } else {
+          showStatus('❌ Error: ' + result.message, 'error');
+        }
+      })
+      .withFailureHandler(function(error) {
+        btn.disabled = false;
+        btn.textContent = 'Create Source';
+        showStatus('❌ Error: ' + error.message, 'error');
+      })
+      .CreateSourceFromDialog(data);
+  }
+
+  function showStatus(message, type) {
+    const el = document.getElementById('status');
+    el.textContent = message;
+    el.className = type;
+  }
+</script>
+
+</body>
+</html>

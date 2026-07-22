@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 14px;
+      font-size: 13px;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      margin-top: 8px;
+      margin-bottom: 2px;
+      font-weight: bold;
+      font-size: 12px;
+    }
+
+    select,
+    input,
+    textarea {
+      width: 100%;
+      padding: 5px;
+      box-sizing: border-box;
+      font-size: 13px;
+    }
+
+    textarea {
+      height: 150px;
+      resize: vertical;
+      min-height: 70px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #1557b0;
+    }
+
+    #status {
+      margin-top: 10px;
+      padding: 6px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      font-weight: bold;
+      font-size: 13px;
+      display: none;
+    }
+
+    #status.success {
+      display: block;
+      background: #d4edda;
+      color: #155724;
+    }
+
+    #status.error {
+      display: block;
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    #status.loading {
+      display: block;
+      background: #cce5ff;
+      color: #004085;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .row > div {
+      flex: 1;
+    }
+
+    #setContainer {
+      display: none;
+      margin-top: 0;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <h2>⚾ Quick Intake</h2>
+
+  <div class="row">
+    <div>
+      <label>Source *</label>
+      <select id="source">
+        <option value="">— Loading —</option>
+      </select>
+    </div>
+    <div>
+      <label>Brand</label>
+      <select id="brand">
+        <option>Topps</option>
+        <option>Donruss</option>
+        <option>Fleer</option>
+        <option>Score</option>
+        <option>Upper Deck</option>
+        <option>Bowman</option>
+        <option>Leaf</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Year</label>
+      <select id="year"></select>
+    </div>
+    <div>
+      <label>Location</label>
+      <select id="location">
+        <option value="">— Select —</option>
+        <option value="Wall Display">Wall Display</option>
+        <option value="Box A">Box A</option>
+        <option value="Box B">Box B</option>
+        <option value="Box C">Box C</option>
+        <option value="Box D">Box D</option>
+        <option value="TBD">TBD</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="setContainer">
+    <label>Set</label>
+    <select id="set">
+      <option value="">— Auto-detect —</option>
+    </select>
+  </div>
+
+  <label>Notes (optional)</label>
+  <input id="notes" placeholder="e.g., Vintage Dig Box" style="height:28px;">
+
+  <label>Card Numbers</label>
+  <textarea id="cards" placeholder="Spaces, commas, line breaks work. Dictation friendly."></textarea>
+
+  <button onclick="processIntake()">Process Intake</button>
+
+  <div id="status"></div>
+
+  <script>
+    // Populate years
+    (function() {
+      const yearSelect = document.getElementById("year");
+      for (let y = 2026; y >= 1950; y--) {
+        let option = document.createElement("option");
+        option.value = y;
+        option.text = y;
+        if (y === 1990) option.selected = true;
+        yearSelect.appendChild(option);
+      }
+      const savedYear = localStorage.getItem('BCD_intake_year');
+      if (savedYear) yearSelect.value = savedYear;
+    })();
+
+    // Load sources
+    function loadSources() {
+      const sourceSelect = document.getElementById('source');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          try {
+            var sources = JSON.parse(result) || [];
+            sourceSelect.innerHTML = '<option value="">— Select source —</option>';
+            if (sources.length > 0) {
+              sources.forEach(function(s) {
+                let opt = document.createElement('option');
+                opt.value = s.id;
+                opt.text = s.title + ' (' + s.dateAcquired + ')';
+                sourceSelect.appendChild(opt);
+              });
+              const savedSource = localStorage.getItem('BCD_intake_source');
+              if (savedSource) sourceSelect.value = savedSource;
+            } else {
+              let opt = document.createElement('option');
+              opt.value = '';
+              opt.text = '— No active sources —';
+              sourceSelect.appendChild(opt);
+            }
+          } catch (e) {
+            sourceSelect.innerHTML = '<option value="">— Error loading sources —</option>';
+          }
+        })
+        .withFailureHandler(function() {
+          sourceSelect.innerHTML = '<option value="">— Error loading sources —</option>';
+        })
+        .GetSourcesJSON();
+    }
+
+    document.getElementById("brand").addEventListener("change", function() {
+      localStorage.setItem('BCD_intake_brand', this.value);
+      loadSets();
+    });
+    document.getElementById("year").addEventListener("change", function() {
+      localStorage.setItem('BCD_intake_year', this.value);
+      loadSets();
+    });
+
+    function loadSets() {
+      const brand = document.getElementById("brand").value;
+      const year = document.getElementById("year").value;
+      const setSelect = document.getElementById("set");
+      const container = document.getElementById("setContainer");
+
+      if (!brand || !year) {
+        container.style.display = "none";
+        return;
+      }
+
+      setSelect.innerHTML = '<option value="">— Auto-detect —</option>';
+      setSelect.disabled = true;
+      container.style.display = "block";
+
+      google.script.run
+        .withSuccessHandler(function(sets) {
+          setSelect.disabled = false;
+          setSelect.innerHTML = '<option value="">— Auto-detect —</option>';
+          if (sets && sets.length > 0) {
+            sets.forEach(function(s) {
+              let opt = document.createElement("option");
+              opt.value = s;
+              opt.text = s;
+              setSelect.appendChild(opt);
+            });
+            // Try to restore saved set
+            const savedSet = localStorage.getItem('BCD_intake_set');
+            if (savedSet && sets.indexOf(savedSet) !== -1) {
+              setSelect.value = savedSet;
+            } else if (sets.length === 1) {
+              setSelect.value = sets[0];
+            }
+            // If no saved set, default to the first one
+            if (!setSelect.value && sets.length > 0) {
+              setSelect.value = sets[0];
+            }
+          } else {
+            let opt = document.createElement("option");
+            opt.value = "";
+            opt.text = "— No sets found —";
+            setSelect.appendChild(opt);
+          }
+        })
+        .withFailureHandler(function() {
+          setSelect.disabled = false;
+          let opt = document.createElement("option");
+          opt.value = "";
+          opt.text = "— Error loading sets —";
+          setSelect.appendChild(opt);
+        })
+        .GetSetsForBrandYear(brand, year);
+    }
+
+    document.getElementById("cards").addEventListener("input", function() {
+      this.style.height = "auto";
+      this.style.height = (this.scrollHeight) + "px";
+    });
+
+    function processIntake() {
+
+      const source = document.getElementById("source").value;
+      if (!source) {
+        showStatus("❌ Please select a source.", "error");
+        return;
+      }
+
+      const brand = document.getElementById("brand").value;
+      const year = document.getElementById("year").value;
+      const set = document.getElementById("set").value;
+      const location = document.getElementById("location").value || "";
+      const notes = document.getElementById("notes").value;
+
+      localStorage.setItem('BCD_intake_source', source);
+      localStorage.setItem('BCD_intake_brand', brand);
+      localStorage.setItem('BCD_intake_year', year);
+      localStorage.setItem('BCD_intake_set', set);
+      localStorage.setItem('BCD_intake_location', location);
+
+      showStatus("Processing...", "loading");
+
+      const form = {
+        source: source,
+        notes: notes,
+        brand: brand,
+        year: year,
+        set: set,
+        location: location,
+        cards: document.getElementById("cards").value
+      };
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          showStatus(
+            "✅ Batch Complete\n" +
+            "Cards Read: " + result.total + "\n" +
+            "New Rows: " + result.added + "\n" +
+            "Updated: " + result.updated,
+            "success"
+          );
+          document.getElementById("cards").value = "";
+          document.getElementById("cards").style.height = "auto";
+          document.getElementById("cards").focus();
+          setTimeout(function() {
+            google.script.host.close();
+          }, 2000);
+        })
+        .withFailureHandler(function(error) {
+          showStatus("❌ " + error.message, "error");
+        })
+        .ProcessQuickIntake(form);
+    }
+
+    function showStatus(message, type) {
+      const el = document.getElementById("status");
+      el.textContent = message;
+      el.className = type;
+    }
+
+    loadSources();
+
+    setTimeout(function() {
+      const savedBrand = localStorage.getItem('BCD_intake_brand');
+      const savedYear = localStorage.getItem('BCD_intake_year');
+      const savedLocation = localStorage.getItem('BCD_intake_location');
+
+      if (savedBrand) document.getElementById('brand').value = savedBrand;
+      if (savedYear) document.getElementById('year').value = savedYear;
+      if (savedLocation) document.getElementById('location').value = savedLocation;
+
+      if (savedBrand && savedYear) {
+        loadSets();
+      }
+    }, 600);
+  </script>
+
+</body>
+
+</html>

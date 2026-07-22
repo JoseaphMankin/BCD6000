@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f7fa;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    h3 {
+      margin-top: 0;
+      margin-bottom: 20px;
+      color: #1a73e8;
+      font-weight: 600;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    label {
+      display: block;
+      margin-top: 14px;
+      margin-bottom: 4px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #333;
+    }
+
+    select,
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      background: white;
+      transition: border-color 0.2s;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: #1a73e8;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 20px;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #1557b0;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      font-weight: 600;
+      font-size: 13px;
+      display: none;
+    }
+
+    #status.success {
+      display: block;
+      background: #d4edda;
+      color: #155724;
+    }
+
+    #status.error {
+      display: block;
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    #status.loading {
+      display: block;
+      background: #cce5ff;
+      color: #004085;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .checkbox-row input {
+      width: auto;
+      margin: 0;
+    }
+
+    .checkbox-row label {
+      margin: 0;
+      font-weight: normal;
+      font-size: 13px;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <div class="container">
+
+    <h3>⚾ Card Hunt Report</h3>
+
+    <label>Brand</label>
+    <select id="brand">
+      <option>Topps</option>
+      <option>Donruss</option>
+      <option>Fleer</option>
+      <option>Score</option>
+      <option>Upper Deck</option>
+      <option>Bowman</option>
+      <option>Leaf</option>
+    </select>
+
+    <label>Year</label>
+    <select id="year"></select>
+
+    <label>Set</label>
+    <select id="set">
+      <option value="">— Auto-detect —</option>
+    </select>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="autoPrint" checked>
+      <label for="autoPrint">Auto-print after generation</label>
+    </div>
+
+    <button id="generateBtn" onclick="generate()">Generate Report</button>
+
+    <div id="status"></div>
+
+    <div class="footer">
+      Report will appear as a new sheet and be formatted for printing.
+    </div>
+
+  </div>
+
+  <script>
+    // Populate years
+    (function() {
+      const yearSelect = document.getElementById("year");
+      const currentYear = new Date().getFullYear();
+      for (let y = currentYear; y >= 1950; y--) {
+        let option = document.createElement("option");
+        option.value = y;
+        option.text = y;
+        if (y === 1985) option.selected = true;
+        yearSelect.appendChild(option);
+      }
+    })();
+
+    // When brand or year changes, load available sets
+    document.getElementById("brand").addEventListener("change", loadSets);
+    document.getElementById("year").addEventListener("change", loadSets);
+
+    function loadSets() {
+      const brand = document.getElementById("brand").value;
+      const year = document.getElementById("year").value;
+      const setSelect = document.getElementById("set");
+      const status = document.getElementById("status");
+
+      if (!brand || !year) {
+        setSelect.innerHTML = '<option value="">— Select brand and year first —</option>';
+        return;
+      }
+
+      setSelect.innerHTML = '<option value="">Loading...</option>';
+      setSelect.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(function(sets) {
+          setSelect.disabled = false;
+          setSelect.innerHTML = '<option value="">— Auto-detect —</option>';
+          if (sets && sets.length > 0) {
+            sets.forEach(function(s) {
+              let opt = document.createElement('option');
+              opt.value = s;
+              opt.text = s;
+              setSelect.appendChild(opt);
+            });
+            // Auto-select the first set
+            setSelect.value = sets[0];
+          } else {
+            let opt = document.createElement('option');
+            opt.value = "";
+            opt.text = "— No sets found —";
+            setSelect.appendChild(opt);
+          }
+        })
+        .withFailureHandler(function() {
+          setSelect.disabled = false;
+          setSelect.innerHTML = '<option value="">— Error loading sets —</option>';
+        })
+        .GetSetsForBrandYear(brand, year);
+    }
+
+    function showStatus(message, type) {
+      const el = document.getElementById("status");
+      el.textContent = message;
+      el.className = type;
+    }
+
+    function generate() {
+      const brand = document.getElementById("brand").value;
+      const year = document.getElementById("year").value;
+      const set = document.getElementById("set").value;
+      const autoPrint = document.getElementById("autoPrint").checked;
+      const btn = document.getElementById("generateBtn");
+
+      if (!brand || !year) {
+        showStatus("❌ Please select a brand and year.", "error");
+        return;
+      }
+
+      if (!set || set === "") {
+        showStatus("❌ Please select a set.", "error");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Generating...";
+      showStatus("Generating report...", "loading");
+
+      google.script.run
+        .withSuccessHandler(function() {
+          btn.disabled = false;
+          btn.textContent = "Generate Report";
+          showStatus("✅ Report generated! Check the 'Card Hunt Report' sheet.", "success");
+
+          if (autoPrint) {
+            // Open the print dialog for the report sheet
+            google.script.run
+              .withFailureHandler(function() {})
+              .PrintCardHuntReport();
+          }
+
+          setTimeout(function() {
+            google.script.host.close();
+          }, 3000);
+        })
+        .withFailureHandler(function(error) {
+          btn.disabled = false;
+          btn.textContent = "Generate Report";
+          showStatus("❌ " + error.message, "error");
+        })
+        .GenerateCardHuntReport(brand, year, set);
+    }
+
+    // Initial load
+    setTimeout(loadSets, 500);
+  </script>
+
+</body>
+
+</html>

@@ -1,0 +1,186 @@
+/*
+==========================================
+ Card Database 6000
+ Sources Manager
+ Version 1.0.0
+==========================================
+*/
+
+function GetSources() {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(BCD.SHEETS.SOURCES);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(BCD.SHEETS.SOURCES);
+    sheet.appendRow(SCHEMA.SOURCES);
+    formatHeader(sheet);
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const results = [];
+
+  for (let i = 1; i < data.length; i++) {
+    results.push({
+      id: data[i][headers.indexOf("Source ID")],
+      title: data[i][headers.indexOf("Title")],
+      dateAcquired: data[i][headers.indexOf("Date Acquired")],
+      cost: data[i][headers.indexOf("Cost")],
+      location: data[i][headers.indexOf("Location")],
+      story: data[i][headers.indexOf("Story")],
+      status: data[i][headers.indexOf("Status")],
+      totalCards: data[i][headers.indexOf("Total Cards")] || 0,
+      totalValue: data[i][headers.indexOf("Total Value")] || 0,
+      dateCreated: data[i][headers.indexOf("Date Created")],
+      dateCompleted: data[i][headers.indexOf("Date Completed")]
+    });
+  }
+
+  return results;
+}
+
+function GetActiveSources() {
+
+  const sources = GetSources();
+  return sources.filter(function(s) {
+    return s.status === "Active";
+  });
+}
+
+function CreateSource(title, dateAcquired, cost, location, story) {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(BCD.SHEETS.SOURCES);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(BCD.SHEETS.SOURCES);
+    sheet.appendRow(SCHEMA.SOURCES);
+    formatHeader(sheet);
+  }
+
+  const id = "SRC-" + Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyyMMdd-HHmmss"
+  );
+
+  sheet.appendRow([
+    id,
+    title,
+    dateAcquired || new Date(),
+    cost || 0,
+    location || "",
+    story || "",
+    "Active",
+    0,
+    0,
+    new Date(),
+    ""
+  ]);
+
+  LogAction("Source Created", title + " (" + id + ")");
+
+  return id;
+}
+
+function CreateSourceFromDialog(data) {
+
+  try {
+    const id = CreateSource(
+      data.title,
+      data.dateAcquired,
+      data.cost,
+      data.location,
+      data.story
+    );
+    return { success: true, id: id };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+function UpdateSourceStats(sourceId) {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const inventory = ss.getSheetByName(BCD.SHEETS.INVENTORY);
+  const sources = ss.getSheetByName(BCD.SHEETS.SOURCES);
+
+  if (!inventory || !sources) return;
+
+  const invData = inventory.getDataRange().getValues();
+  const invHeaders = invData[0];
+  const sourceCol = invHeaders.indexOf("Source");
+
+  let count = 0;
+
+  for (let i = 1; i < invData.length; i++) {
+    if (invData[i][sourceCol] === sourceId) {
+      count++;
+    }
+  }
+
+  const srcData = sources.getDataRange().getValues();
+  const srcHeaders = srcData[0];
+
+  for (let i = 1; i < srcData.length; i++) {
+    if (srcData[i][srcHeaders.indexOf("Source ID")] === sourceId) {
+      sources.getRange(i + 1, srcHeaders.indexOf("Total Cards") + 1).setValue(count);
+      sources.getRange(i + 1, srcHeaders.indexOf("Last Updated") + 1).setValue(new Date());
+      break;
+    }
+  }
+}
+
+function CompleteSource(sourceId) {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(BCD.SHEETS.SOURCES);
+
+  if (!sheet) return;
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][headers.indexOf("Source ID")] === sourceId) {
+      sheet.getRange(i + 1, headers.indexOf("Status") + 1).setValue("Completed");
+      sheet.getRange(i + 1, headers.indexOf("Date Completed") + 1).setValue(new Date());
+      LogAction("Source Completed", sourceId);
+      break;
+    }
+  }
+}
+
+function GetSourceTitle(sourceId) {
+
+  const sources = GetSources();
+  for (let i = 0; i < sources.length; i++) {
+    if (sources[i].id === sourceId) {
+      return sources[i].title;
+    }
+  }
+  return "Unknown Source";
+}
+
+function ShowActiveSources() {
+
+  const sources = GetActiveSources();
+
+  if (sources.length === 0) {
+    SpreadsheetApp.getUi().alert(
+      "No active sources.\n\nCreate a new source via:\nBCD6000 → Sources → New Source"
+    );
+    return;
+  }
+
+  const message = sources.map(function(s, i) {
+    return (i + 1) + ". " + s.title + " (" + s.dateAcquired + ")";
+  }).join("\n");
+
+  SpreadsheetApp.getUi().alert(
+    "Active Sources:\n\n" + message + "\n\n" +
+    "Use these in Quick Intake to track your cards."
+  );
+}
