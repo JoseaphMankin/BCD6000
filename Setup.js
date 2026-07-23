@@ -1,17 +1,8 @@
-/*
-==========================================
- Card Database 6000
- Setup Engine
- Version 1.0.0
-==========================================
-*/
-
 function InitializeDatabase() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
 
-  // Confirm
   const response = ui.alert(
     "Initialize Database",
     "This will delete ALL existing sheets and create a fresh BCD6000 database.\n\nContinue?",
@@ -22,7 +13,6 @@ function InitializeDatabase() {
     return;
   }
 
-  // Delete all sheets
   const sheets = ss.getSheets();
   for (let i = 0; i < sheets.length; i++) {
     if (sheets[i].getName() !== BCD.SHEETS.SETTINGS) {
@@ -30,17 +20,14 @@ function InitializeDatabase() {
     }
   }
 
-  // Rename Settings sheet
   const settings = ss.getSheetByName(BCD.SHEETS.SETTINGS);
   if (settings) {
     settings.setName(BCD.SHEETS.SETTINGS);
   }
 
-  // Create all sheets from Schema
   const sheetNames = Object.keys(SCHEMA);
   for (let i = 0; i < sheetNames.length; i++) {
     const name = sheetNames[i];
-    // Skip Settings because it already exists
     if (name === "SETTINGS") continue;
 
     let sheet = ss.getSheetByName(BCD.SHEETS[name]);
@@ -48,12 +35,10 @@ function InitializeDatabase() {
       sheet = ss.insertSheet(BCD.SHEETS[name]);
     }
 
-    // Build the sheet with headers
     const headers = SCHEMA[name];
     sheet.clear();
     sheet.appendRow(headers);
 
-    // Format header
     const lastCol = headers.length;
     sheet.getRange(1, 1, 1, lastCol)
       .setFontWeight("bold")
@@ -62,14 +47,12 @@ function InitializeDatabase() {
     sheet.autoResizeColumns(1, lastCol);
   }
 
-  // Write initial Settings
   writeSetting("Database Version", BCD.VERSION);
   writeSetting("Default Condition", BCD.DEFAULTS.CONDITION);
   writeSetting("Default Set Type", BCD.DEFAULTS.SET_TYPE);
   writeSetting("Default Quality", BCD.DEFAULTS.QUALITY);
   writeSetting("Last Initialized", new Date().toISOString());
 
-  // Log the action
   LogAction("Database Initialized", "Version " + BCD.VERSION);
 
   ui.alert(
@@ -80,14 +63,7 @@ function InitializeDatabase() {
   );
 }
 
-/*
-==========================================
- Helper: Write setting to Settings sheet
-==========================================
-*/
-
 function writeSetting(key, value) {
-
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(BCD.SHEETS.SETTINGS);
 

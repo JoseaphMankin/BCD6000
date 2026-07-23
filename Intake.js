@@ -24,6 +24,37 @@ function GetSetsForBrandYear(brand, year) {
   return Object.keys(sets);
 }
 
+function GetKeyCards() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("KeyCards");
+  if (!sheet) return [];
+  
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  
+  var brandCol = headers.indexOf("Brand");
+  var yearCol = headers.indexOf("Year");
+  var setCol = headers.indexOf("Set");
+  var cardCol = headers.indexOf("Card #");
+  var playerCol = headers.indexOf("Player");
+  var categoryCol = headers.indexOf("Category");
+  var tierCol = headers.indexOf("Tier");
+  
+  var keyCards = [];
+  for (var i = 1; i < data.length; i++) {
+    keyCards.push({
+      brand: String(data[i][brandCol]),
+      year: String(data[i][yearCol]),
+      set: String(data[i][setCol]),
+      card: String(data[i][cardCol]),
+      player: String(data[i][playerCol]),
+      category: String(data[i][categoryCol]),
+      tier: String(data[i][tierCol])
+    });
+  }
+  return keyCards;
+}
+
 function ProcessQuickIntake(form) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(BCD.SHEETS.INVENTORY);
@@ -54,10 +85,7 @@ function ProcessQuickIntake(form) {
     throw new Error("No card numbers detected.");
   }
 
-  // --- SET SELECTION: Use user's selection if provided ---
   var set = userSelectedSet;
-  
-  // Only auto-detect if user didn't select a set
   if (!set || set === "") {
     var checklist = ss.getSheetByName(BCD.SHEETS.MASTER);
     if (checklist) {
@@ -82,12 +110,12 @@ function ProcessQuickIntake(form) {
     }
   }
 
-  // --- FORCE: Always use the user's selection if they provided one ---
   if (userSelectedSet && userSelectedSet !== "") {
     set = userSelectedSet;
   }
 
-  Logger.log("Using Set: " + set + " (User selected: " + userSelectedSet + ")");
+  var keyCards = GetKeyCards();
+  var keyCardHits = [];
 
   var sourceTitle = GetSourceTitle(source);
   var notes = form.notes || "";
@@ -136,15 +164,11 @@ function ProcessQuickIntake(form) {
     }
 
     if (!found) {
-      // --- FORCE: Always use the user's selected set when adding a new row ---
       var finalSet = set;
-      
-      // If the user selected a set, use it no matter what
       if (userSelectedSet && userSelectedSet !== "") {
         finalSet = userSelectedSet;
       }
       
-      // If still empty, try to find it from the Master Checklist
       if (!finalSet || finalSet === "") {
         var checklist = ss.getSheetByName(BCD.SHEETS.MASTER);
         if (checklist) {
@@ -188,11 +212,28 @@ function ProcessQuickIntake(form) {
       sheet.appendRow(row);
       added++;
     }
+
+    // --- KEY CARD CHECK ---
+    var cardStr = String(card);
+    for (var k = 0; k < keyCards.length; k++) {
+      var kc = keyCards[k];
+      if (
+        kc.brand === brand &&
+        String(kc.year) === String(year) &&
+        kc.card === cardStr
+      ) {
+        keyCardHits.push({
+          player: kc.player,
+          card: kc.card,
+          tier: kc.tier,
+          category: kc.category
+        });
+        break;
+      }
+    }
   });
 
-  UpdateInventoryFromChecklist();
-  UpdateSetCompletion();
-
+  // --- LIGHTWEIGHT STATS ONLY ---
   if (source) {
     UpdateSourceStats(source);
   }
@@ -204,6 +245,7 @@ function ProcessQuickIntake(form) {
     updated: updated,
     total: numbers.length,
     batch: batchID,
-    source: source
+    source: source,
+    keyHits: keyCardHits
   };
 }

@@ -1,11 +1,3 @@
-/*
-==========================================
- Card Database 6000
- Schema Definitions
- Version 1.0.2
-==========================================
-*/
-
 const SCHEMA = {
 
   INVENTORY: [
@@ -110,5 +102,15 @@ const SCHEMA = {
     "Total Value",
     "Date Created",
     "Date Completed"
+  ],
+
+  KEYCARDS: [
+    "Brand",
+    "Year",
+    "Set",
+    "Card #",
+    "Player",
+    "Category",
+    "Tier"
   ]
 };

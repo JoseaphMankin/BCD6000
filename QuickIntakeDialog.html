@@ -85,6 +85,32 @@
       color: #004085;
     }
 
+    #status.key-hit {
+      display: block;
+      background: #fff3cd;
+      color: #856404;
+      border: 2px solid #ffc107;
+      font-size: 15px;
+    }
+
+    #closeBtn {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #ffc107;
+      color: #856404;
+      border: 2px solid #ffc107;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    #closeBtn:hover {
+      background: #e0a800;
+    }
+
     .row {
       display: flex;
       gap: 10px;
@@ -162,6 +188,7 @@
   <button onclick="processIntake()">Process Intake</button>
 
   <div id="status"></div>
+  <button id="closeBtn" onclick="closeDialog()">OK</button>
 
   <script>
     // Populate years
@@ -247,14 +274,12 @@
               opt.text = s;
               setSelect.appendChild(opt);
             });
-            // Try to restore saved set
             const savedSet = localStorage.getItem('BCD_intake_set');
             if (savedSet && sets.indexOf(savedSet) !== -1) {
               setSelect.value = savedSet;
             } else if (sets.length === 1) {
               setSelect.value = sets[0];
             }
-            // If no saved set, default to the first one
             if (!setSelect.value && sets.length > 0) {
               setSelect.value = sets[0];
             }
@@ -279,6 +304,16 @@
       this.style.height = "auto";
       this.style.height = (this.scrollHeight) + "px";
     });
+
+    function showStatus(message, type) {
+      const el = document.getElementById("status");
+      el.textContent = message;
+      el.className = type;
+    }
+
+    function closeDialog() {
+      google.script.host.close();
+    }
 
     function processIntake() {
 
@@ -312,32 +347,44 @@
         cards: document.getElementById("cards").value
       };
 
+      const closeBtn = document.getElementById("closeBtn");
+      closeBtn.style.display = "none";
+
       google.script.run
         .withSuccessHandler(function(result) {
-          showStatus(
-            "✅ Batch Complete\n" +
+          var message = "";
+          var hasKeyHits = result.keyHits && result.keyHits.length > 0;
+
+          if (hasKeyHits) {
+            message = "⭐ KEY CARD ALERT! ⭐\n\n";
+            result.keyHits.forEach(function(hit) {
+              message += "🎯 " + hit.player + " #" + hit.card + " (" + hit.category + ") — " + hit.tier + "\n";
+            });
+            message += "\n---\n";
+          }
+
+          message += "✅ Batch Complete\n" +
             "Cards Read: " + result.total + "\n" +
             "New Rows: " + result.added + "\n" +
-            "Updated: " + result.updated,
-            "success"
-          );
-          document.getElementById("cards").value = "";
-          document.getElementById("cards").style.height = "auto";
-          document.getElementById("cards").focus();
-          setTimeout(function() {
-            google.script.host.close();
-          }, 2000);
+            "Updated: " + result.updated;
+
+          if (hasKeyHits) {
+            showStatus(message, "key-hit");
+            closeBtn.style.display = "block";
+          } else {
+            showStatus(message, "success");
+            document.getElementById("cards").value = "";
+            document.getElementById("cards").style.height = "auto";
+            document.getElementById("cards").focus();
+            setTimeout(function() {
+              google.script.host.close();
+            }, 2000);
+          }
         })
         .withFailureHandler(function(error) {
           showStatus("❌ " + error.message, "error");
         })
         .ProcessQuickIntake(form);
-    }
-
-    function showStatus(message, type) {
-      const el = document.getElementById("status");
-      el.textContent = message;
-      el.className = type;
     }
 
     loadSources();

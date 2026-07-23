@@ -18,8 +18,7 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(
       ui.createMenu("Collection")
-        .addItem("Enrich Inventory from Checklist", "UpdateInventoryFromChecklist")
-        .addItem("Update Set Completion", "UpdateSetCompletion")
+        .addItem("Rebuild All Stats", "UpdateSetCompletion")
     )
     .addSeparator()
     .addSubMenu(
@@ -152,7 +151,6 @@ function GetChecklistFromDialog(params) {
 
         cardResults.forEach(function(c) {
           var set = release.name || c.setName || brand;
-          // --- NO RENAME ---
           cards.push({
             brand: brand,
             year: String(year),

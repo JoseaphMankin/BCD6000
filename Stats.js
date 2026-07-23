@@ -16,7 +16,6 @@ function UpdateSetCompletion() {
   var invHeaders = invData[0];
   var checkHeaders = checkData[0];
 
-  // Build checklist counts per set
   var checklistCounts = {};
   for (var i = 1; i < checkData.length; i++) {
     var key = makeSetKey(
@@ -28,7 +27,6 @@ function UpdateSetCompletion() {
     checklistCounts[key]++;
   }
 
-  // Build inventory counts per set
   var owned = {};
   for (var i = 1; i < invData.length; i++) {
     var key = makeSetKey(
@@ -52,7 +50,6 @@ function UpdateSetCompletion() {
     }
   }
 
-  // Update Sets sheet
   for (var i = 1; i < setData.length; i++) {
     var row = setData[i];
     var key = makeSetKey(row[0], row[1], row[2]);
@@ -73,8 +70,8 @@ function UpdateSetCompletion() {
     updateSetField(sets, i + 1, setHeaders, "Last Updated", new Date());
   }
 
-  // --- Build the Dashboard ---
   BuildDashboard();
+  UpdateInventoryFromChecklist();
 
   LogAction("Set Completion Updated", "Stats recalculated for " + (setData.length - 1) + " sets");
 }
@@ -97,11 +94,10 @@ function BuildDashboard() {
   var uniqueCol = headers.indexOf("Unique Owned");
   var percentCol = headers.indexOf("Percent Complete");
 
-  // --- HEADER ---
-  sheet.getRange("A1").setValue("📊 Collection Dashboard");
-  sheet.getRange("A1").setFontWeight("bold").setFontSize(20);
+  var inventory = ss.getSheetByName(BCD.SHEETS.INVENTORY);
+  var invData = inventory.getDataRange().getValues();
+  var invHeaders = invData[0];
 
-  // --- STATS CARDS ---
   var activeSets = 0;
   var totalCards = 0;
   var totalUnique = 0;
@@ -131,44 +127,59 @@ function BuildDashboard() {
     }
   }
 
-  // Find the set with the highest percent (next to complete)
   setList.sort(function(a, b) { return b.percent - a.percent; });
   if (setList.length > 0) {
     nextTarget = setList[0].name;
     nextPercent = setList[0].percent;
   }
 
-  // Row 3: Active Sets
+  var totalPhysical = 0;
+  for (var i = 1; i < invData.length; i++) {
+    var inProgress = Number(invData[i][invHeaders.indexOf("Quantity In Progress")]) || 0;
+    var standby = Number(invData[i][invHeaders.indexOf("Quantity Standby")]) || 0;
+    totalPhysical += inProgress + standby;
+  }
+
+  var duplicates = totalPhysical - totalUnique;
+
+  sheet.getRange("A1").setValue("📊 Collection Dashboard");
+  sheet.getRange("A1").setFontWeight("bold").setFontSize(20);
+
   sheet.getRange("A3").setValue("📦 Active Sets");
   sheet.getRange("A3").setFontWeight("bold").setFontSize(12);
   sheet.getRange("A4").setValue(activeSets);
   sheet.getRange("A4").setFontSize(16);
 
-  // Row 3: Total Cards
-  sheet.getRange("C3").setValue("🃏 Total Cards");
+  sheet.getRange("C3").setValue("🃏 Checklist Cards");
   sheet.getRange("C3").setFontWeight("bold").setFontSize(12);
   sheet.getRange("C4").setValue(totalCards);
   sheet.getRange("C4").setFontSize(16);
 
-  // Row 3: Unique Owned
   sheet.getRange("E3").setValue("✅ Unique Owned");
   sheet.getRange("E3").setFontWeight("bold").setFontSize(12);
   sheet.getRange("E4").setValue(totalUnique);
   sheet.getRange("E4").setFontSize(16);
 
-  // Row 3: Sets at 50%+ (this is a COUNT, not a percentage!)
-  sheet.getRange("G3").setValue("🎯 Sets at 50%+");
+  sheet.getRange("G3").setValue("📦 Physical Cards");
   sheet.getRange("G3").setFontWeight("bold").setFontSize(12);
-  sheet.getRange("G4").setValue(setsOver50);
+  sheet.getRange("G4").setValue(totalPhysical);
   sheet.getRange("G4").setFontSize(16);
 
-  // Row 5: Next to Complete
-  sheet.getRange("A5").setValue("🏆 Next to Complete");
+  sheet.getRange("A5").setValue("🔄 Duplicates");
   sheet.getRange("A5").setFontWeight("bold").setFontSize(12);
-  sheet.getRange("A6").setValue(nextTarget + " (" + Math.round(nextPercent * 100) / 100 + "%)");
-  sheet.getRange("A6").setFontSize(14);
+  sheet.getRange("A6").setValue(duplicates);
+  sheet.getRange("A6").setFontSize(16);
 
-  // --- TOP 3 CLOSEST TO COMPLETION ---
+  sheet.getRange("C5").setValue("🎯 Sets at 50%+");
+  sheet.getRange("C5").setFontWeight("bold").setFontSize(12);
+  sheet.getRange("C6").setValue(setsOver50);
+  sheet.getRange("C6").setFontSize(16);
+
+  sheet.getRange("E5").setValue("🏆 Next to Complete");
+  sheet.getRange("E5").setFontWeight("bold").setFontSize(12);
+  sheet.getRange("E6").setValue(nextTarget + " (" + Math.round(nextPercent * 100) / 100 + "%)");
+  sheet.getRange("E6").setFontSize(14);
+
   var topRow = 8;
   sheet.getRange(topRow, 1).setValue("🏆 Top 3 Closest to Completion");
   sheet.getRange(topRow, 1).setFontWeight("bold").setFontSize(14);
@@ -197,7 +208,6 @@ function BuildDashboard() {
     topRow += top3.length + 2;
   }
 
-  // --- ALL SETS ---
   sheet.getRange(topRow, 1).setValue("All Sets");
   sheet.getRange(topRow, 1).setFontWeight("bold").setFontSize(14);
   topRow++;
@@ -218,6 +228,58 @@ function BuildDashboard() {
   }
 
   sheet.autoResizeColumns(1, 4);
+}
+
+function UpdateInventoryFromChecklist() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var inventory = ss.getSheetByName("Inventory");
+  var checklist = ss.getSheetByName("Master Checklist");
+  
+  if (!inventory || !checklist) return;
+  
+  var invData = inventory.getDataRange().getValues();
+  var checkData = checklist.getDataRange().getValues();
+  
+  var invHeaders = invData[0];
+  var checkHeaders = checkData[0];
+  
+  var lookup = {};
+  for (var i = 1; i < checkData.length; i++) {
+    var brand = checkData[i][checkHeaders.indexOf("Brand")];
+    var year = checkData[i][checkHeaders.indexOf("Year")];
+    var set = checkData[i][checkHeaders.indexOf("Set")];
+    var card = checkData[i][checkHeaders.indexOf("Card #")];
+    var key = String(brand) + "|" + String(year) + "|" + String(set) + "|" + String(card);
+    lookup[key] = checkData[i];
+  }
+  
+  var fields = ["Set", "Player", "Team", "Position", "Hall of Fame", "Rookie", "Future Stars", "Rookie Cup", "League Leaders", "Checklist", "Manager", "Multi Player", "Variation", "Error", "Image URL", "Card ID"];
+  var updated = 0;
+  
+  for (var i = 1; i < invData.length; i++) {
+    var brand = invData[i][invHeaders.indexOf("Brand")];
+    var year = invData[i][invHeaders.indexOf("Year")];
+    var set = invData[i][invHeaders.indexOf("Set")];
+    var card = invData[i][invHeaders.indexOf("Card #")];
+    var key = String(brand) + "|" + String(year) + "|" + String(set) + "|" + String(card);
+    
+    var match = lookup[key];
+    if (match) {
+      fields.forEach(function(field) {
+        var invCol = invHeaders.indexOf(field);
+        var checkCol = checkHeaders.indexOf(field);
+        if (invCol !== -1 && checkCol !== -1) {
+          var value = match[checkCol];
+          if (value && value !== "") {
+            inventory.getRange(i + 1, invCol + 1).setValue(value);
+          }
+        }
+      });
+      updated++;
+    }
+  }
+  
+  Logger.log("✅ Enriched " + updated + " cards.");
 }
 
 function makeSetKey(brand, year, set) {
